@@ -28,7 +28,7 @@ Set the variables once so they persist across all sessions and VS Code restarts:
 
 ```powershell
 [Environment]::SetEnvironmentVariable("JIRA_API_TOKEN", "your_token_here", "User")
-[Environment]::SetEnvironmentVariable("JIRA_EMAIL", "sivaselvakumar.ponnusamysanthanakumar@amd.com", "User")
+[Environment]::SetEnvironmentVariable("JIRA_EMAIL", "your_email@amd.com", "User")
 ```
 
 > After running these commands, **fully restart VS Code** for the variables to take effect.
@@ -41,13 +41,13 @@ Set them each time you open a terminal (lost when the terminal closes):
 **PowerShell:**
 ```powershell
 $env:JIRA_API_TOKEN = "your_token_here"
-$env:JIRA_EMAIL    = "sivaselvakumar.ponnusamysanthanakumar@amd.com"
+$env:JIRA_EMAIL    = "your_email@amd.com"
 ```
 
 **Bash/zsh:**
 ```bash
 export JIRA_API_TOKEN="your_token_here"
-export JIRA_EMAIL="sivaselvakumar.ponnusamysanthanakumar@amd.com"
+export JIRA_EMAIL="your_email@amd.com"
 ```
 
 > **Note:** If using the Claude Code VS Code extension, only Option A (permanent) works reliably.
