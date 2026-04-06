@@ -432,6 +432,118 @@ def build_diff_html(diff: dict | None) -> str:
     </div>"""
 
 
+import math
+
+AGE_BUCKETS = [
+    ("0–3 d",  0,  3,  "#43a047"),
+    ("4–7 d",  4,  7,  "#7cb342"),
+    ("8–14 d", 8,  14, "#fb8c00"),
+    ("15–30 d",15, 30, "#e65100"),
+    ("30+ d",  31, 9999,"#c62828"),
+]
+
+
+def _issue_age_days(issue: dict) -> int:
+    raw = safe_field(issue, "fields", "created", default="")
+    if not raw or raw == "—":
+        return 0
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - dt).days
+    except ValueError:
+        return 0
+
+
+def build_stats_cards(primary: int, other: int, resolved: int, total: int) -> str:
+    cards = [
+        ("Active Blockers (P1+S1)", primary, "#c62828"),
+        ("Other High Priority",     other,   "#b45309"),
+        ("Resolved",                resolved,"#43a047"),
+        ("Total",                   total,   "#1a1a2e"),
+    ]
+    html = '<div class="stats-row">'
+    for label, value, color in cards:
+        html += (
+            f'<div class="stat-card" style="border-top: 3px solid {color}">'
+            f'<div class="stat-num" style="color:{color}">{value}</div>'
+            f'<div class="stat-label">{label}</div>'
+            f'</div>'
+        )
+    html += '</div>'
+    return html
+
+
+def build_status_donut(status_counts: dict[str, int]) -> str:
+    total = sum(status_counts.values())
+    if total == 0:
+        return '<div class="chart-card"><p style="color:#888">No data</p></div>'
+
+    r, stroke = 70, 18
+    circumference = 2 * math.pi * r
+    segments = []
+    offset = 0
+
+    for status, count in sorted(status_counts.items(), key=lambda x: -x[1]):
+        frac = count / total
+        dash = frac * circumference
+        color = STATUS_COLORS.get(status, "#757575")
+        segments.append(
+            f'<circle cx="90" cy="90" r="{r}" fill="none" '
+            f'stroke="{color}" stroke-width="{stroke}" '
+            f'stroke-dasharray="{dash:.2f} {circumference - dash:.2f}" '
+            f'stroke-dashoffset="{-offset:.2f}" />'
+        )
+        offset += dash
+
+    legend = "".join(
+        f'<div class="legend-item">'
+        f'<span class="legend-dot" style="background:{STATUS_COLORS.get(s,"#757575")}"></span>'
+        f'{escape_html(s)}: <strong>{c}</strong></div>'
+        for s, c in sorted(status_counts.items(), key=lambda x: -x[1])
+    )
+
+    return f"""
+    <div class="chart-card">
+      <div class="chart-title">Status Distribution</div>
+      <svg viewBox="0 0 180 180" width="170" height="170" style="display:block;margin:0 auto 12px">
+        {chr(10).join(segments)}
+        <text x="90" y="86" text-anchor="middle" font-size="28" font-weight="700"
+              fill="#1a1a2e">{total}</text>
+        <text x="90" y="104" text-anchor="middle" font-size="11" fill="#888">tickets</text>
+      </svg>
+      <div class="legend">{legend}</div>
+    </div>"""
+
+
+def build_age_chart(issues: list[dict]) -> str:
+    active = [i for i in issues if safe_field(i, "fields", "status", "name") not in RESOLVED_STATUSES]
+    buckets = []
+    for label, lo, hi, color in AGE_BUCKETS:
+        count = sum(1 for i in active if lo <= _issue_age_days(i) <= hi)
+        buckets.append((label, count, color))
+
+    max_count = max((c for _, c, _ in buckets), default=1) or 1
+
+    bars_html = ""
+    for label, count, color in buckets:
+        pct = (count / max_count) * 100
+        bars_html += (
+            f'<div class="age-row">'
+            f'<span class="age-label">{label}</span>'
+            f'<div class="age-track">'
+            f'<div class="age-fill" style="width:{pct:.0f}%;background:{color}"></div>'
+            f'</div>'
+            f'<span class="age-count">{count}</span>'
+            f'</div>'
+        )
+
+    return f"""
+    <div class="chart-card">
+      <div class="chart-title">Ticket Age (Active Only)</div>
+      <div class="age-chart">{bars_html}</div>
+    </div>"""
+
+
 def build_html(issues: list[dict], version: str, jql: str, auth_header: str = "", diff: dict | None = None) -> str:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -465,6 +577,10 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
         f'{escape_html(s)}: {c}</span>'
         for s, c in sorted(status_counts.items())
     )
+
+    stats_html = build_stats_cards(len(primary_blockers), len(other_high), len(resolved), len(issues))
+    donut_html = build_status_donut(status_counts)
+    age_html = build_age_chart(issues)
 
     primary_table = build_table("primary-table", build_issue_rows(primary_blockers, pr_map))
     other_table = build_table("other-table", build_issue_rows(other_high, pr_map))
@@ -562,6 +678,26 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
     .pr-status-dot {{ width: 7px; height: 7px; border-radius: 50%;
                       flex-shrink: 0; display: inline-block; }}
     footer {{ text-align: center; color: #aaa; font-size: 11px; padding: 24px; }}
+    .stats-row {{ display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }}
+    .stat-card {{ flex: 1 1 140px; background: white; border-radius: 10px;
+                  box-shadow: 0 2px 10px rgba(0,0,0,0.06); padding: 18px 20px;
+                  text-align: center; min-width: 120px; }}
+    .stat-num {{ font-size: 32px; font-weight: 800; line-height: 1.1; }}
+    .stat-label {{ font-size: 12px; color: #888; margin-top: 4px; font-weight: 600;
+                   text-transform: uppercase; letter-spacing: 0.04em; }}
+    .chart-row {{ display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }}
+    .chart-card {{ flex: 1 1 300px; background: white; border-radius: 10px;
+                   box-shadow: 0 2px 10px rgba(0,0,0,0.06); padding: 20px 24px; }}
+    .chart-title {{ font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 14px; }}
+    .legend {{ display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center; }}
+    .legend-item {{ font-size: 12px; color: #555; display: flex; align-items: center; gap: 5px; }}
+    .legend-dot {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
+    .age-chart {{ display: flex; flex-direction: column; gap: 10px; }}
+    .age-row {{ display: flex; align-items: center; gap: 10px; }}
+    .age-label {{ width: 60px; font-size: 12px; color: #555; text-align: right; font-weight: 600; }}
+    .age-track {{ flex: 1; height: 22px; background: #f0f0f0; border-radius: 6px; overflow: hidden; }}
+    .age-fill {{ height: 100%; border-radius: 6px; transition: width 0.4s ease; min-width: 2px; }}
+    .age-count {{ width: 28px; font-size: 13px; font-weight: 700; color: #333; }}
   </style>
 </head>
 <body>
@@ -578,6 +714,11 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
     <div class="summary-bar">
       {summary_pills}
       <span class="total">Total: <strong>{len(issues)}</strong> tickets</span>
+    </div>
+    {stats_html}
+    <div class="chart-row">
+      {donut_html}
+      {age_html}
     </div>
     <div class="search-bar">
       <input type="text" id="search" placeholder="Filter by key, summary, assignee..."
