@@ -1,0 +1,19 @@
+# Reports contain potentially sensitive Jira data
+reports/*.md
+reports/*.html
+!reports/.gitkeep
+
+# Environment / secrets
+.env
+*.token
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Claude Code local settings
+.claude/settings.local.json

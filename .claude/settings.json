@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(gh:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+      "Bash(date:*)",
+      "Bash(find:*)",
+      "Read",
+      "Write(reports/*)",
+      "Glob",
+      "Grep",
+      "WebFetch"
+    ],
+    "deny": []
+  }
+}

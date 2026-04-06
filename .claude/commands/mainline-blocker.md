@@ -1,0 +1,108 @@
+---
+description: Fetch P1 mainline blocker tickets from Jira ROCM project for a given ROCm version
+allowed-tools: Bash, Write
+---
+
+# Mainline Blockers
+
+Fetch P1 tickets (all priorities) plus P2 tickets with Assessed Severity = S1: Critical, from the Jira ROCM project for a given ROCm version.
+
+## Instructions
+
+### 0. Check Auth
+
+Verify the required environment variables are set:
+
+```bash
+echo "Token set: $([ -n "$JIRA_API_TOKEN" ] && echo YES || echo NO)"
+echo "Email set: $([ -n "$JIRA_EMAIL" ] && echo YES || echo NO)"
+```
+
+If either is missing, tell the user:
+- **PowerShell**: `$env:JIRA_API_TOKEN = "your_token"` and `$env:JIRA_EMAIL = "your.email@amd.com"`
+- **Bash/zsh**: `export JIRA_API_TOKEN="your_token"` and `export JIRA_EMAIL="your.email@amd.com"`
+
+Do NOT proceed if credentials are missing.
+
+### 1. Determine Target Version
+
+Check if the user specified a version in the command (e.g. `/mainline-blocker ROCm 7.13.0`).
+If not, default to **ROCm 7.13.0** and inform the user.
+
+### 2. Fetch Tickets
+
+Run the script with the target version. Use `--html` to open results in the browser:
+
+```bash
+python scripts/jira_p1s1.py --version "ROCm 7.13.0" --html
+```
+
+Or markdown output in chat:
+
+```bash
+python scripts/jira_p1s1.py --version "ROCm 7.13.0"
+```
+
+Replace `ROCm 7.13.0` with the user-specified version if provided.
+
+The script fetches from the ROCM Jira project:
+- **P1 tickets**: priority = `P1: High` or `P1 (Gating)` (all severities)
+- **P2 + S1 tickets**: priority = `P2: Medium` AND Assessed Severity = `S1: Critical`
+
+> **Note on severity**: The ROCM project often leaves the Assessed Severity field blank on P1 tickets.
+> The default query fetches all P1 tickets regardless of severity, plus P2 tickets only if they have S1: Critical assessed severity.
+
+### 3. If 0 Results with Severity Filter
+
+If the script returns 0 results, run a broader query without the severity filter:
+
+```bash
+python scripts/jira_p1s1.py --version "ROCm 7.13.0" --all-p1
+```
+
+Then note in the report: "No tickets had Severity explicitly set to Critical/Blocker. Showing all P1 tickets."
+
+### 4. Generate Report
+
+Format the output as:
+
+```markdown
+# Mainline Blockers — ROCm [VERSION]
+
+_Generated: [DATE]_
+_Source: [Jira ROCM project](https://amd-hub.atlassian.net/jira/software/c/projects/ROCM/summary)_
+
+## Summary
+- **Total P1 blockers**: N
+- **Open / In Progress**: N
+- **Awaiting triage**: N
+- **Done / Discarded**: N (excluded below)
+
+## Active Blockers (Open / In Progress / Triage / Queue)
+
+| Key | Summary | Status | Assignee | Age |
+|-----|---------|--------|----------|-----|
+| [ROCM-XXXXX](link) | Summary | Status | @name | Nd |
+
+## Needs Triage
+
+PRs in Triage state with no assignee — need owner assignment.
+
+## Recently Resolved (last 7 days)
+
+| Key | Summary | Resolution |
+|-----|---------|------------|
+```
+
+### 5. Save Report
+
+Save to `reports/YYYY-MM-DD-mainline-blockers-[version-slug].md`.
+
+Ask the user if they want to save after displaying.
+
+## Notes
+
+- Exclude tickets in **Done** or **Discarded** status from the active section (show them in a separate "Resolved" section)
+- Always link ticket keys to `https://amd-hub.atlassian.net/browse/ROCM-XXXXX`
+- If the Severity field is blank, note it as "Severity not set" rather than hiding the ticket
+- Age = days since `updatedAt`
