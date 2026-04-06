@@ -1,6 +1,7 @@
 # Reports contain potentially sensitive Jira data
 reports/*.md
 reports/*.html
+reports/*.json
 !reports/.gitkeep
 
 # Environment / secrets

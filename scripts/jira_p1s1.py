@@ -198,6 +198,100 @@ def fetch_all_pr_data(auth_header: str, issues: list[dict]) -> dict[str, list[di
 RESOLVED_STATUSES = {"Done", "Discarded"}
 
 
+# ---------------------------------------------------------------------------
+# Snapshot helpers — save/load a compact JSON record per run for diffing
+# ---------------------------------------------------------------------------
+
+def snapshot_from_issues(issues: list[dict], version: str, timestamp: str) -> dict:
+    return {
+        "version": version,
+        "timestamp": timestamp,
+        "tickets": {
+            issue["key"]: {
+                "summary": safe_field(issue, "fields", "summary"),
+                "status":   safe_field(issue, "fields", "status", "name"),
+                "priority": safe_field(issue, "fields", "priority", "name"),
+                "assessed_severity": safe_field(issue, "fields", "customfield_10417", "value", default=""),
+                "assignee": safe_field(issue, "fields", "assignee", "displayName"),
+            }
+            for issue in issues
+        },
+    }
+
+
+def save_snapshot(snapshot: dict, reports_dir: str, timestamp: str, version_slug: str) -> str:
+    os.makedirs(reports_dir, exist_ok=True)
+    path = os.path.normpath(os.path.join(
+        reports_dir, f"{timestamp}-mainline-blockers-{version_slug}.json"
+    ))
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, indent=2)
+    return path
+
+
+def load_previous_snapshot(reports_dir: str, version_slug: str, current_timestamp: str) -> dict | None:
+    """Find and load the most recent snapshot for this version, excluding the current run."""
+    pattern = f"-mainline-blockers-{version_slug}.json"
+    try:
+        candidates = sorted(
+            [f for f in os.listdir(reports_dir) if f.endswith(pattern) and not f.startswith(current_timestamp)],
+            reverse=True,
+        )
+    except FileNotFoundError:
+        return None
+    if not candidates:
+        return None
+    path = os.path.join(reports_dir, candidates[0])
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def compute_diff(prev: dict, curr: dict) -> dict:
+    prev_tickets = prev.get("tickets", {})
+    curr_tickets = curr.get("tickets", {})
+    new_keys     = [k for k in curr_tickets if k not in prev_tickets]
+    removed_keys = [k for k in prev_tickets if k not in curr_tickets]
+    status_changes = {
+        k: {"from": prev_tickets[k]["status"], "to": curr_tickets[k]["status"]}
+        for k in curr_tickets
+        if k in prev_tickets and curr_tickets[k]["status"] != prev_tickets[k]["status"]
+    }
+    return {
+        "prev_timestamp": prev.get("timestamp", "?"),
+        "prev_count": len(prev_tickets),
+        "curr_count": len(curr_tickets),
+        "delta": len(curr_tickets) - len(prev_tickets),
+        "new": {k: curr_tickets[k] for k in new_keys},
+        "removed": {k: prev_tickets[k] for k in removed_keys},
+        "status_changes": status_changes,
+    }
+
+
+def print_diff(diff: dict) -> None:
+    delta = diff["delta"]
+    sign  = "+" if delta >= 0 else ""
+    arrow = "▲" if delta > 0 else ("▼" if delta < 0 else "—")
+    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"  Changes vs last report ({diff['prev_timestamp']})", file=sys.stderr)
+    print(f"  Total: {diff['prev_count']} → {diff['curr_count']}  {arrow} {sign}{delta}", file=sys.stderr)
+    print(f"{'='*60}", file=sys.stderr)
+    if diff["new"]:
+        print(f"\n  NEW tickets ({len(diff['new'])}):", file=sys.stderr)
+        for k, t in diff["new"].items():
+            print(f"    + {k}  [{t['status']}]  {t['summary'][:60]}  {JIRA_BASE_URL}/browse/{k}", file=sys.stderr)
+    if diff["removed"]:
+        print(f"\n  REMOVED tickets ({len(diff['removed'])}):", file=sys.stderr)
+        for k, t in diff["removed"].items():
+            print(f"    - {k}  [{t['status']}]  {t['summary'][:60]}", file=sys.stderr)
+    if diff["status_changes"]:
+        print(f"\n  STATUS changes ({len(diff['status_changes'])}):", file=sys.stderr)
+        for k, ch in diff["status_changes"].items():
+            print(f"    ~ {k}  {ch['from']} → {ch['to']}", file=sys.stderr)
+    if not diff["new"] and not diff["removed"] and not diff["status_changes"]:
+        print("  No changes since last report.", file=sys.stderr)
+    print(f"{'='*60}\n", file=sys.stderr)
+
+
 def build_issue_rows(issues: list[dict], pr_map: dict[str, list[dict]] | None = None) -> str:
     rows = ""
     for issue in issues:
@@ -279,7 +373,66 @@ def build_table(table_id: str, rows: str) -> str:
     </div>"""
 
 
-def build_html(issues: list[dict], version: str, jql: str, auth_header: str = "") -> str:
+def build_diff_html(diff: dict | None) -> str:
+    """Render the Changes Since Last Report banner for the HTML page."""
+    if diff is None:
+        return '<div class="diff-banner diff-none">No previous report found — this is the first run for this version.</div>'
+
+    delta  = diff["delta"]
+    sign   = "+" if delta > 0 else ""
+    arrow  = "▲" if delta > 0 else ("▼" if delta < 0 else "—")
+    color  = "#c62828" if delta > 0 else ("#2e7d32" if delta < 0 else "#555")
+
+    rows_new = "".join(
+        f'<tr class="diff-new"><td><a href="{JIRA_BASE_URL}/browse/{k}" target="_blank">{k}</a></td>'
+        f'<td>{escape_html(t["summary"][:80])}</td>'
+        f'<td>{status_badge(t["status"])}</td>'
+        f'<td><span style="color:#2e7d32;font-weight:700">NEW</span></td></tr>'
+        for k, t in diff["new"].items()
+    )
+    rows_removed = "".join(
+        f'<tr class="diff-removed"><td><a href="{JIRA_BASE_URL}/browse/{k}" target="_blank">{k}</a></td>'
+        f'<td>{escape_html(t["summary"][:80])}</td>'
+        f'<td>{status_badge(t["status"])}</td>'
+        f'<td><span style="color:#c62828;font-weight:700">REMOVED</span></td></tr>'
+        for k, t in diff["removed"].items()
+    )
+    rows_changed = "".join(
+        f'<tr class="diff-changed"><td><a href="{JIRA_BASE_URL}/browse/{k}" target="_blank">{k}</a></td>'
+        f'<td colspan="2"><span class="diff-from">{escape_html(ch["from"])}</span>'
+        f' → <span class="diff-to">{escape_html(ch["to"])}</span></td>'
+        f'<td><span style="color:#e65100;font-weight:700">STATUS</span></td></tr>'
+        for k, ch in diff["status_changes"].items()
+    )
+
+    table = ""
+    if rows_new or rows_removed or rows_changed:
+        table = f"""
+        <table class="diff-table">
+          <thead><tr><th>Key</th><th>Summary / Change</th><th>Status</th><th>Change</th></tr></thead>
+          <tbody>{rows_new}{rows_removed}{rows_changed}</tbody>
+        </table>"""
+    else:
+        table = '<p class="diff-nochange">No ticket additions, removals, or status changes.</p>'
+
+    return f"""
+    <div class="diff-banner">
+      <div class="diff-header">
+        <span class="diff-title">Changes Since Last Report</span>
+        <span class="diff-meta">vs {escape_html(diff["prev_timestamp"])}</span>
+        <span class="diff-delta" style="color:{color}">{arrow} {sign}{delta} tickets
+          ({diff['prev_count']} → {diff['curr_count']})</span>
+        <span class="diff-pills">
+          {f'<span class="diff-pill new">{len(diff["new"])} new</span>' if diff["new"] else ""}
+          {f'<span class="diff-pill removed">{len(diff["removed"])} removed</span>' if diff["removed"] else ""}
+          {f'<span class="diff-pill changed">{len(diff["status_changes"])} status changes</span>' if diff["status_changes"] else ""}
+        </span>
+      </div>
+      {table}
+    </div>"""
+
+
+def build_html(issues: list[dict], version: str, jql: str, auth_header: str = "", diff: dict | None = None) -> str:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     pr_map: dict[str, list[dict]] = {}
@@ -376,6 +529,29 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
                          border: 1px solid #ddd; border-radius: 6px;
                          font-size: 13px; outline: none; }}
     .search-bar input:focus {{ border-color: #0052cc; box-shadow: 0 0 0 2px #cce0ff; }}
+    .diff-banner {{ background: white; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                    margin-bottom: 24px; overflow: hidden; }}
+    .diff-banner.diff-none {{ padding: 12px 20px; color: #888; font-size: 13px; font-style: italic; }}
+    .diff-header {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+                    padding: 14px 20px; background: #f8f9ff; border-bottom: 1px solid #e8eaf6; }}
+    .diff-title {{ font-size: 15px; font-weight: 700; color: #1a1a2e; }}
+    .diff-meta {{ font-size: 12px; color: #888; }}
+    .diff-delta {{ font-size: 14px; font-weight: 700; margin-left: auto; }}
+    .diff-pills {{ display: flex; gap: 6px; }}
+    .diff-pill {{ font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }}
+    .diff-pill.new {{ background: #e8f5e9; color: #2e7d32; }}
+    .diff-pill.removed {{ background: #ffebee; color: #c62828; }}
+    .diff-pill.changed {{ background: #fff3e0; color: #e65100; }}
+    .diff-table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    .diff-table th {{ background: #f0f0f0; color: #555; padding: 8px 16px;
+                      text-align: left; font-size: 11px; font-weight: 600; }}
+    .diff-table td {{ padding: 8px 16px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }}
+    .diff-new td {{ background: #f9fff9; }}
+    .diff-removed td {{ background: #fff9f9; }}
+    .diff-changed td {{ background: #fffdf5; }}
+    .diff-from {{ color: #999; text-decoration: line-through; }}
+    .diff-to {{ color: #1e88e5; font-weight: 600; }}
+    .diff-nochange {{ padding: 12px 20px; color: #888; font-size: 13px; font-style: italic; margin: 0; }}
     .pr-cell {{ min-width: 180px; }}
     .pr-list {{ display: flex; flex-direction: column; gap: 4px; }}
     .pr-link {{ display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
@@ -398,6 +574,7 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
   </header>
   <div class="jql-bar">{escape_html(jql)}</div>
   <div class="container">
+    {build_diff_html(diff)}
     <div class="summary-bar">
       {summary_pills}
       <span class="total">Total: <strong>{len(issues)}</strong> tickets</span>
@@ -436,7 +613,7 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
 
     const sortState = {{}};
     function parseAge(s) {{
-      const m = s.match(/(\d+)d ago/);
+      const m = s.match(/(\\d+)d ago/);
       if (m) return parseInt(m[1], 10);
       if (s === 'today') return 0;
       return -1;
@@ -583,14 +760,25 @@ def main():
         print(json.dumps(issues, indent=2))
         return
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now = datetime.now(timezone.utc)
+    timestamp = now.strftime("%Y-%m-%d-%H%M")
     version_slug = args.version.lower().replace(" ", "-").replace(".", "")
     reports_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "reports"))
 
+    # Snapshot + diff
+    curr_snapshot = snapshot_from_issues(issues, args.version, timestamp)
+    prev_snapshot = load_previous_snapshot(reports_dir, version_slug, timestamp)
+    diff = compute_diff(prev_snapshot, curr_snapshot) if prev_snapshot else None
+    if diff:
+        print_diff(diff)
+    else:
+        print("No previous snapshot found — skipping diff.", file=sys.stderr)
+    save_snapshot(curr_snapshot, reports_dir, timestamp, version_slug)
+
     if args.html:
-        html = build_html(issues, args.version, jql, auth_header)
+        html = build_html(issues, args.version, jql, auth_header, diff)
         if args.save:
-            out_path = os.path.join(reports_dir, f"{today}-mainline-blockers-{version_slug}.html")
+            out_path = os.path.join(reports_dir, f"{timestamp}-mainline-blockers-{version_slug}.html")
             out_path = os.path.normpath(out_path)
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -609,7 +797,7 @@ def main():
         report = build_markdown(issues, args.version, jql)
         print(report)
         if args.save:
-            out_path = os.path.join(reports_dir, f"{today}-mainline-blockers-{version_slug}.md")
+            out_path = os.path.join(reports_dir, f"{timestamp}-mainline-blockers-{version_slug}.md")
             out_path = os.path.normpath(out_path)
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(report)

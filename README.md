@@ -104,6 +104,43 @@ The `/mainline-blocker` command opens an interactive browser dashboard with:
 
 - **Sortable headers** — click any column to sort ascending/descending
 - **Live search** — filter across all sections by key, summary, assignee, etc.
+- **Changes Since Last Report** — diff banner at the top comparing against the previous run (see below)
+
+## Diff / Change Tracking
+
+Every run automatically saves a JSON snapshot to `reports/`. On subsequent runs, the script compares the current results against the most recent snapshot for the same version and reports what changed.
+
+### Terminal output
+
+```
+============================================================
+  Changes vs last report (2026-04-06-0900)
+  Total: 57 → 60  ▲ +3
+============================================================
+  NEW tickets (3):
+    + ROCM-21300  [Open]  Some new blocker...  https://amd-hub.atlassian.net/browse/ROCM-21300
+  STATUS changes (2):
+    ~ ROCM-21042  In Progress → Done
+    ~ ROCM-21271  Triage → In Progress
+============================================================
+```
+
+### HTML banner
+
+The browser dashboard shows a **Changes Since Last Report** banner above the tables with:
+- Total ticket count delta (▲ increased / ▼ decreased)
+- Color-coded pills: **green** = new tickets, **red** = removed tickets, **amber** = status changes
+- A detail table listing every added, removed, or status-changed ticket
+
+### Snapshot files
+
+| File | Purpose |
+|------|---------|
+| `reports/{timestamp}-mainline-blockers-{version}.json` | Auto-saved on every run — used for diffing |
+| `reports/{timestamp}-mainline-blockers-{version}.html` | Saved only when `--save` flag is passed |
+| `reports/{timestamp}-mainline-blockers-{version}.md` | Saved only when `--save` flag is passed |
+
+The first run for a new version will show "No previous snapshot found" — the diff starts working from the second run onward.
 
 ## Helper Script
 
