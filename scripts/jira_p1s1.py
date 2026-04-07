@@ -387,21 +387,21 @@ def build_diff_html(diff: dict | None) -> str:
         f'<tr class="diff-new"><td><a href="{JIRA_BASE_URL}/browse/{k}" target="_blank">{k}</a></td>'
         f'<td>{escape_html(t["summary"][:80])}</td>'
         f'<td>{status_badge(t["status"])}</td>'
-        f'<td><span style="color:#2e7d32;font-weight:700">NEW</span></td></tr>'
+        f'<td><span class="diff-change-tag new">New</span></td></tr>'
         for k, t in diff["new"].items()
     )
     rows_removed = "".join(
         f'<tr class="diff-removed"><td><a href="{JIRA_BASE_URL}/browse/{k}" target="_blank">{k}</a></td>'
         f'<td>{escape_html(t["summary"][:80])}</td>'
         f'<td>{status_badge(t["status"])}</td>'
-        f'<td><span style="color:#c62828;font-weight:700">REMOVED</span></td></tr>'
+        f'<td><span class="diff-change-tag removed">Removed</span></td></tr>'
         for k, t in diff["removed"].items()
     )
     rows_changed = "".join(
         f'<tr class="diff-changed"><td><a href="{JIRA_BASE_URL}/browse/{k}" target="_blank">{k}</a></td>'
         f'<td colspan="2"><span class="diff-from">{escape_html(ch["from"])}</span>'
-        f' → <span class="diff-to">{escape_html(ch["to"])}</span></td>'
-        f'<td><span style="color:#e65100;font-weight:700">STATUS</span></td></tr>'
+        f' &nbsp;→&nbsp; <span class="diff-to">{escape_html(ch["to"])}</span></td>'
+        f'<td><span class="diff-change-tag status">Status</span></td></tr>'
         for k, ch in diff["status_changes"].items()
     )
 
@@ -418,15 +418,17 @@ def build_diff_html(diff: dict | None) -> str:
     return f"""
     <div class="diff-banner">
       <div class="diff-header">
-        <span class="diff-title">Changes Since Last Report</span>
-        <span class="diff-meta">vs {escape_html(diff["prev_timestamp"])}</span>
-        <span class="diff-delta" style="color:{color}">{arrow} {sign}{delta} tickets
-          ({diff['prev_count']} → {diff['curr_count']})</span>
-        <span class="diff-pills">
+        <div class="diff-header-top">
+          <span class="diff-title">Changes Since Last Report</span>
+          <span class="diff-meta">vs {escape_html(diff["prev_timestamp"])}</span>
+          <span class="diff-delta" style="color:{color}">{arrow} {sign}{delta} tickets
+            ({diff['prev_count']} → {diff['curr_count']})</span>
+        </div>
+        <div class="diff-pills">
           {f'<span class="diff-pill new">{len(diff["new"])} new</span>' if diff["new"] else ""}
           {f'<span class="diff-pill removed">{len(diff["removed"])} removed</span>' if diff["removed"] else ""}
           {f'<span class="diff-pill changed">{len(diff["status_changes"])} status changes</span>' if diff["status_changes"] else ""}
-        </span>
+        </div>
       </div>
       {table}
     </div>"""
@@ -647,27 +649,36 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
     .search-bar input:focus {{ border-color: #0052cc; box-shadow: 0 0 0 2px #cce0ff; }}
     .diff-banner {{ background: white; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
                     margin-bottom: 24px; overflow: hidden; }}
-    .diff-banner.diff-none {{ padding: 12px 20px; color: #888; font-size: 13px; font-style: italic; }}
-    .diff-header {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-                    padding: 14px 20px; background: #f8f9ff; border-bottom: 1px solid #e8eaf6; }}
-    .diff-title {{ font-size: 15px; font-weight: 700; color: #1a1a2e; }}
-    .diff-meta {{ font-size: 12px; color: #888; }}
-    .diff-delta {{ font-size: 14px; font-weight: 700; margin-left: auto; }}
-    .diff-pills {{ display: flex; gap: 6px; }}
-    .diff-pill {{ font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }}
+    .diff-banner.diff-none {{ padding: 16px 24px; color: #888; font-size: 13px; font-style: italic; }}
+    .diff-header {{ padding: 18px 24px; background: #f8f9ff; border-bottom: 1px solid #e8eaf6; }}
+    .diff-header-top {{ display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+                        margin-bottom: 10px; }}
+    .diff-title {{ font-size: 18px; font-weight: 700; color: #1a1a2e; }}
+    .diff-meta {{ font-size: 13px; color: #888; }}
+    .diff-delta {{ font-size: 16px; font-weight: 700; margin-left: auto; }}
+    .diff-pills {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+    .diff-pill {{ font-size: 12px; font-weight: 700; padding: 4px 14px; border-radius: 12px; }}
     .diff-pill.new {{ background: #e8f5e9; color: #2e7d32; }}
     .diff-pill.removed {{ background: #ffebee; color: #c62828; }}
     .diff-pill.changed {{ background: #fff3e0; color: #e65100; }}
-    .diff-table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
-    .diff-table th {{ background: #f0f0f0; color: #555; padding: 8px 16px;
-                      text-align: left; font-size: 11px; font-weight: 600; }}
-    .diff-table td {{ padding: 8px 16px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }}
-    .diff-new td {{ background: #f9fff9; }}
-    .diff-removed td {{ background: #fff9f9; }}
+    .diff-table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+    .diff-table th {{ background: #eef0f5; color: #444; padding: 12px 20px;
+                      text-align: left; font-size: 12px; font-weight: 700;
+                      text-transform: uppercase; letter-spacing: 0.04em; }}
+    .diff-table td {{ padding: 12px 20px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }}
+    .diff-table a {{ color: #0052cc; font-weight: 600; text-decoration: none; }}
+    .diff-table a:hover {{ text-decoration: underline; }}
+    .diff-new td {{ background: #f4fdf4; }}
+    .diff-removed td {{ background: #fef6f6; }}
     .diff-changed td {{ background: #fffdf5; }}
-    .diff-from {{ color: #999; text-decoration: line-through; }}
-    .diff-to {{ color: #1e88e5; font-weight: 600; }}
-    .diff-nochange {{ padding: 12px 20px; color: #888; font-size: 13px; font-style: italic; margin: 0; }}
+    .diff-from {{ color: #999; text-decoration: line-through; font-size: 13px; }}
+    .diff-to {{ color: #1e88e5; font-weight: 700; font-size: 14px; }}
+    .diff-change-tag {{ display: inline-block; font-size: 11px; font-weight: 800; padding: 3px 10px;
+                        border-radius: 6px; text-transform: uppercase; letter-spacing: 0.03em; }}
+    .diff-change-tag.new {{ background: #e8f5e9; color: #2e7d32; }}
+    .diff-change-tag.removed {{ background: #ffebee; color: #c62828; }}
+    .diff-change-tag.status {{ background: #fff3e0; color: #e65100; }}
+    .diff-nochange {{ padding: 16px 24px; color: #888; font-size: 14px; font-style: italic; margin: 0; }}
     .pr-cell {{ min-width: 180px; }}
     .pr-list {{ display: flex; flex-direction: column; gap: 4px; }}
     .pr-link {{ display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
