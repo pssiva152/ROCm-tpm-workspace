@@ -42,16 +42,66 @@ STATUS_COLORS = {
 }
 
 
+_ENV_TEMPLATE = """\
+# Jira credentials — fill in your values below.
+# This file is gitignored and will never be pushed.
+# Generate a token at: https://id.atlassian.com/manage-profile/security/api-tokens
+
+JIRA_API_TOKEN=
+JIRA_EMAIL=
+"""
+
+
+def _load_dotenv():
+    """Load variables from .env at the project root. Creates a blank .env on first run."""
+    env_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+    if not os.path.exists(env_path):
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(_ENV_TEMPLATE)
+        print("", file=sys.stderr)
+        print("=" * 64, file=sys.stderr)
+        print("  FIRST-TIME SETUP", file=sys.stderr)
+        print("=" * 64, file=sys.stderr)
+        print(f"  Created: {env_path}", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("  1. Open the .env file in the project root", file=sys.stderr)
+        print("  2. Add your Jira API token and email", file=sys.stderr)
+        print("  3. Re-run this command", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("  Generate a token at:", file=sys.stderr)
+        print("  https://id.atlassian.com/manage-profile/security/api-tokens", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("  See README.md for detailed setup instructions.", file=sys.stderr)
+        print("=" * 64, file=sys.stderr)
+        sys.exit(0)
+    with open(env_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key, val = key.strip(), val.strip().strip('"').strip("'")
+            if val and not os.environ.get(key):
+                os.environ[key] = val
+
+
 def get_auth_header() -> str:
+    _load_dotenv()
     token = os.environ.get("JIRA_API_TOKEN", "").strip()
     email = os.environ.get("JIRA_EMAIL", "").strip()
-    if not token:
-        print("ERROR: JIRA_API_TOKEN environment variable is not set.", file=sys.stderr)
-        print("  PowerShell: $env:JIRA_API_TOKEN = 'your_token'", file=sys.stderr)
-        sys.exit(1)
-    if not email:
-        print("ERROR: JIRA_EMAIL environment variable is not set.", file=sys.stderr)
-        print("  PowerShell: $env:JIRA_EMAIL = 'your.email@amd.com'", file=sys.stderr)
+    if not token or not email:
+        print("", file=sys.stderr)
+        print("ERROR: Jira credentials are missing.", file=sys.stderr)
+        print("", file=sys.stderr)
+        if not token:
+            print("  JIRA_API_TOKEN is not set.", file=sys.stderr)
+        if not email:
+            print("  JIRA_EMAIL is not set.", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("  To fix, edit the .env file in the project root with your credentials.", file=sys.stderr)
+        print("  Or export them:  $env:JIRA_API_TOKEN = 'token'  (PowerShell)", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("  See README.md for detailed setup instructions.", file=sys.stderr)
         sys.exit(1)
     credentials = base64.b64encode(f"{email}:{token}".encode()).decode()
     return f"Basic {credentials}"

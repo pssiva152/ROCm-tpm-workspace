@@ -25,25 +25,21 @@ This workspace is for TPM/Manager oversight of the ROCm ecosystem — focused on
 
 ### How `/mainline-blocker` Works
 
-1. Reads `JIRA_API_TOKEN` and `JIRA_EMAIL` from environment variables
+1. Reads `JIRA_API_TOKEN` and `JIRA_EMAIL` from `.env` file or environment variables
 2. Calls `scripts/jira_p1s1.py` via Bash
 3. Queries the [ROCM Jira project](https://amd-hub.atlassian.net/jira/software/c/projects/ROCM/summary) using the Jira REST API v3
 4. Filters: `P1` tickets + `P2` tickets with Assessed Severity = `S1: Critical`
 5. Displays formatted markdown report and offers to save it
 
-### Setup (run once per terminal session)
+### Setup
 
-**PowerShell:**
-```powershell
-$env:JIRA_API_TOKEN = "your_personal_access_token"
-$env:JIRA_EMAIL    = "your.email@amd.com"
-```
+**Option A — `.env` file (recommended, one-time):**
+Run the script once to auto-create a blank `.env`, then fill in your credentials. The script auto-loads from this file.
 
-**Bash/zsh:**
-```bash
-export JIRA_API_TOKEN="your_personal_access_token"
-export JIRA_EMAIL="your.email@amd.com"
-```
+**Option B — Environment variables (per session):**
+
+PowerShell: `$env:JIRA_API_TOKEN = "your_token"` / `$env:JIRA_EMAIL = "your.email@amd.com"`
+Bash: `export JIRA_API_TOKEN="your_token"` / `export JIRA_EMAIL="your.email@amd.com"`
 
 > Generate your token at: https://id.atlassian.com/manage-profile/security/api-tokens
 

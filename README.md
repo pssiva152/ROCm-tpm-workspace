@@ -22,7 +22,25 @@ Generate an API token from your Atlassian account:
 
 > https://id.atlassian.com/manage-profile/security/api-tokens
 
-#### Option A — Permanent (recommended)
+#### Option A — `.env` file (recommended)
+
+Run the script once — it auto-creates a blank `.env` file in the project root:
+
+```powershell
+python scripts/jira_p1s1.py --dry-run
+```
+
+Then edit `.env` with your token and email:
+
+```
+JIRA_API_TOKEN=your_token_here
+JIRA_EMAIL=your_email@amd.com
+```
+
+> `.env` is gitignored — your credentials will never be pushed, even if you commit everything.
+> The script auto-loads from this file. No export needed.
+
+#### Option B — Permanent environment variables
 
 Set the variables once so they persist across all sessions and VS Code restarts:
 
@@ -34,7 +52,7 @@ Set the variables once so they persist across all sessions and VS Code restarts:
 > After running these commands, **fully restart VS Code** for the variables to take effect.
 > You only need to do this once — they survive reboots.
 
-#### Option B — Session only
+#### Option C — Session only
 
 Set them each time you open a terminal (lost when the terminal closes):
 
@@ -50,7 +68,7 @@ export JIRA_API_TOKEN="your_token_here"
 export JIRA_EMAIL="your_email@amd.com"
 ```
 
-> **Note:** If using the Claude Code VS Code extension, only Option A (permanent) works reliably.
+> **Note:** If using the Claude Code VS Code extension, only Option A or B work reliably.
 > The extension's internal shell is bash — PowerShell session variables set after VS Code launches
 > are not visible to it.
 
