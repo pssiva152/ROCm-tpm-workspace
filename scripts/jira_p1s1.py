@@ -801,38 +801,106 @@ def build_html(issues: list[dict], version: str, jql: str, auth_header: str = ""
 </html>"""
 
 
-def build_markdown(issues: list[dict], version: str, jql: str) -> str:
+def _md_issue_row(issue: dict) -> str:
+    key = issue.get("key", "?")
+    url = f"{JIRA_BASE_URL}/browse/{key}"
+    summary = safe_field(issue, "fields", "summary")
+    if len(summary) > 65:
+        summary = summary[:62] + "..."
+    status   = safe_field(issue, "fields", "status", "name")
+    priority = safe_field(issue, "fields", "priority", "name")
+    assessed = safe_field(issue, "fields", "customfield_10417", "value", default="—")
+    assignee = safe_field(issue, "fields", "assignee", "displayName")
+    updated  = format_age(safe_field(issue, "fields", "updated", default=""))
+    return f"| [{key}]({url}) | {summary} | {status} | {priority} | {assessed} | {assignee} | {updated} |"
+
+
+def _md_section(title: str, issues: list[dict]) -> list[str]:
+    lines = [f"### {title} ({len(issues)})", ""]
+    if not issues:
+        lines += ["_None._", ""]
+        return lines
+    lines += [
+        "| Key | Summary | Status | Priority | Assessed Severity | Assignee | Updated |",
+        "|-----|---------|--------|----------|-------------------|----------|---------|",
+    ]
+    for issue in issues:
+        lines.append(_md_issue_row(issue))
+    lines.append("")
+    return lines
+
+
+def build_markdown(issues: list[dict], version: str, diff: dict | None = None) -> str:
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    def is_resolved(i):
+        return safe_field(i, "fields", "status", "name") in RESOLVED_STATUSES
+
+    def is_p1_s1(i):
+        priority = safe_field(i, "fields", "priority", "name")
+        severity = safe_field(i, "fields", "customfield_10417", "value", default="")
+        return priority in ("P1: High", "P1 (Gating)") and severity.startswith("S1")
+
+    primary  = [i for i in issues if not is_resolved(i) and is_p1_s1(i)]
+    other    = [i for i in issues if not is_resolved(i) and not is_p1_s1(i)]
+    resolved = [i for i in issues if is_resolved(i)]
+
     lines = [
-        f"# Jira P1/S1 Tickets — {version}",
-        f"_Generated: {today}_",
-        f"_JQL: `{jql}`_",
-        f"_Total: {len(issues)} issues_",
+        f"# Mainline Blockers — {version}",
         "",
-        "---",
+        f"_Generated: {today}_",
+        f"_Source: [Jira ROCM project]({JIRA_BASE_URL}/jira/software/c/projects/ROCM/summary)_",
+        "",
+        "## Summary",
+        "",
+        f"- **Total tickets**: {len(issues)}",
+        f"- **Active Blockers (P1 + S1)**: {len(primary)}",
+        f"- **Other High Priority (P1+S2 / P2+S1)**: {len(other)}",
+        f"- **Resolved (Done / Discarded)**: {len(resolved)}",
         "",
     ]
 
     if not issues:
-        lines.append("No P1/S1 issues found for this version.")
+        lines.append("No tickets found for this version.")
         return "\n".join(lines)
 
-    lines += [
-        "| Key | Summary | Status | Assignee | Reporter | Updated |",
-        "|-----|---------|--------|----------|----------|---------|",
-    ]
+    lines += ["---", ""]
+    lines += _md_section("Active Blockers — P1 + S1", primary)
+    lines += _md_section("Other High Priority — P1+S2 / P2+S1", other)
+    lines += _md_section("Resolved (Done / Discarded)", resolved)
 
-    for issue in issues:
-        key = issue.get("key", "?")
-        url = f"{JIRA_BASE_URL}/browse/{key}"
-        summary = safe_field(issue, "fields", "summary")
-        if len(summary) > 70:
-            summary = summary[:67] + "..."
-        status = safe_field(issue, "fields", "status", "name")
-        assignee = safe_field(issue, "fields", "assignee", "displayName")
-        reporter = safe_field(issue, "fields", "reporter", "displayName")
-        updated = format_age(safe_field(issue, "fields", "updated", default=""))
-        lines.append(f"| [{key}]({url}) | {summary} | {status} | {assignee} | {reporter} | {updated} |")
+    # Diff section
+    if diff is not None:
+        delta = diff["delta"]
+        sign  = "+" if delta > 0 else ""
+        arrow = "▲" if delta > 0 else ("▼" if delta < 0 else "—")
+        lines += [
+            "---",
+            "",
+            f"## Changes Since Last Report (vs {diff['prev_timestamp']})",
+            "",
+            f"**Total: {diff['prev_count']} → {diff['curr_count']} {arrow} {sign}{delta}**",
+            "",
+        ]
+        if diff["new"]:
+            lines += [f"### New tickets ({len(diff['new'])})", ""]
+            for k, t in diff["new"].items():
+                lines.append(f"- **[{k}]({JIRA_BASE_URL}/browse/{k})** `{t['status']}` — {t['summary'][:70]}")
+            lines.append("")
+        if diff["removed"]:
+            lines += [f"### Removed tickets ({len(diff['removed'])})", ""]
+            for k, t in diff["removed"].items():
+                lines.append(f"- **[{k}]({JIRA_BASE_URL}/browse/{k})** `{t['status']}` — {t['summary'][:70]}")
+            lines.append("")
+        if diff["status_changes"]:
+            lines += [f"### Status changes ({len(diff['status_changes'])})", ""]
+            for k, ch in diff["status_changes"].items():
+                lines.append(f"- **[{k}]({JIRA_BASE_URL}/browse/{k})** {ch['from']} → **{ch['to']}**")
+            lines.append("")
+        if not diff["new"] and not diff["removed"] and not diff["status_changes"]:
+            lines += ["_No changes since last report._", ""]
+    elif diff is None:
+        lines += ["---", "", "_No previous snapshot — this is the first run for this version._", ""]
 
     return "\n".join(lines)
 
@@ -921,11 +989,11 @@ def main():
     curr_snapshot = snapshot_from_issues(issues, args.version, timestamp)
     prev_snapshot = load_previous_snapshot(reports_dir, version_slug, timestamp)
     diff = compute_diff(prev_snapshot, curr_snapshot) if prev_snapshot else None
-    if diff:
-        print_diff(diff)
-    else:
-        print("No previous snapshot found — skipping diff.", file=sys.stderr)
     save_snapshot(curr_snapshot, reports_dir, timestamp, version_slug)
+
+    # Always print the structured markdown summary to stdout
+    report = build_markdown(issues, args.version, diff)
+    print(report)
 
     if args.html:
         html = build_html(issues, args.version, jql, auth_header, diff)
@@ -934,10 +1002,9 @@ def main():
             out_path = os.path.normpath(out_path)
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(html)
-            print(f"Saved to: {out_path}", file=sys.stderr)
+            print(f"\nSaved HTML to: {out_path}", file=sys.stderr)
             webbrowser.open(f"file:///{out_path.replace(os.sep, '/')}")
         else:
-            # Write to a temp file and open
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".html", delete=False, encoding="utf-8"
             ) as tmp:
@@ -945,15 +1012,13 @@ def main():
                 tmp_path = tmp.name
             webbrowser.open(f"file:///{tmp_path.replace(os.sep, '/')}")
             print(f"Opened in browser: {tmp_path}", file=sys.stderr)
-    else:
-        report = build_markdown(issues, args.version, jql)
-        print(report)
-        if args.save:
-            out_path = os.path.join(reports_dir, f"{timestamp}-mainline-blockers-{version_slug}.md")
-            out_path = os.path.normpath(out_path)
-            with open(out_path, "w", encoding="utf-8") as f:
-                f.write(report)
-            print(f"\nSaved to: {out_path}", file=sys.stderr)
+
+    if args.save and not args.html:
+        out_path = os.path.join(reports_dir, f"{timestamp}-mainline-blockers-{version_slug}.md")
+        out_path = os.path.normpath(out_path)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(report)
+        print(f"\nSaved markdown to: {out_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
