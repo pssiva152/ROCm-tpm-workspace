@@ -37,13 +37,15 @@ If not, default to **ROCm 7.13.0** and inform the user.
 
 ### 2. Fetch Tickets
 
-Run the script with the target version. ALWAYS use `--html` to open the dashboard in the browser:
+Run the script with the target version. ALWAYS use `--html --save` to open the dashboard in the browser AND save it to `reports/` in a single run:
 
 ```bash
-python scripts/jira_p1s1.py --version "ROCm 7.13.0" --html
+python scripts/jira_p1s1.py --version "ROCm 7.13.0" --html --save
 ```
 
 Replace `ROCm 7.13.0` with the user-specified version if provided.
+
+NEVER run the script more than once per command invocation. One run does everything — fetch, display, and save.
 
 The script fetches from the ROCM Jira project:
 - **P1 tickets**: priority = `P1: High` or `P1 (Gating)` (all severities)
@@ -93,12 +95,6 @@ PRs in Triage state with no assignee — need owner assignment.
 | Key | Summary | Resolution |
 |-----|---------|------------|
 ```
-
-### 5. Save Report
-
-Save to `reports/YYYY-MM-DD-mainline-blockers-[version-slug].md`.
-
-Ask the user if they want to save after displaying.
 
 ## Notes
 
