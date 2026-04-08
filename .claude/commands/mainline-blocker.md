@@ -7,22 +7,28 @@ allowed-tools: Bash, Write
 
 Fetch P1 tickets (all priorities) plus P2 tickets with Assessed Severity = S1: Critical, from the Jira ROCM project for a given ROCm version.
 
+## IMPORTANT RULES
+
+- NEVER modify, edit, or fix the Python script or any other source files
+- NEVER create git commits or push changes
+- If the script fails or shows a setup message, relay the message to the user and STOP
+
 ## Instructions
 
 ### 0. Check Auth
 
-Verify the required environment variables are set:
+Run a quick dry-run to verify credentials are available (either from `.env` file or environment variables):
 
 ```bash
-echo "Token set: $([ -n "$JIRA_API_TOKEN" ] && echo YES || echo NO)"
-echo "Email set: $([ -n "$JIRA_EMAIL" ] && echo YES || echo NO)"
+python scripts/jira_p1s1.py --dry-run
 ```
 
-If either is missing, tell the user:
-- **PowerShell**: `$env:JIRA_API_TOKEN = "your_token"` and `$env:JIRA_EMAIL = "your.email@amd.com"`
-- **Bash/zsh**: `export JIRA_API_TOKEN="your_token"` and `export JIRA_EMAIL="your.email@amd.com"`
+If the script exits with a "FIRST-TIME SETUP" or "credentials are missing" message, show the user:
+- A `.env` file has been created (or needs to be filled in) at the project root
+- They need to add their `JIRA_API_TOKEN` and `JIRA_EMAIL` to that file
+- See `README.md` for detailed instructions
 
-Do NOT proceed if credentials are missing.
+Do NOT proceed if the dry-run fails. Do NOT try to fix the problem.
 
 ### 1. Determine Target Version
 
