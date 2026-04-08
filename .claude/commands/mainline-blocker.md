@@ -37,16 +37,10 @@ If not, default to **ROCm 7.13.0** and inform the user.
 
 ### 2. Fetch Tickets
 
-Run the script with the target version. Use `--html` to open results in the browser:
+Run the script with the target version. ALWAYS use `--html` to open the dashboard in the browser:
 
 ```bash
 python scripts/jira_p1s1.py --version "ROCm 7.13.0" --html
-```
-
-Or markdown output in chat:
-
-```bash
-python scripts/jira_p1s1.py --version "ROCm 7.13.0"
 ```
 
 Replace `ROCm 7.13.0` with the user-specified version if provided.
