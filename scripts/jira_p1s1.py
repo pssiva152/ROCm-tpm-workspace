@@ -58,22 +58,25 @@ def _load_dotenv():
     if not os.path.exists(env_path):
         with open(env_path, "w", encoding="utf-8") as f:
             f.write(_ENV_TEMPLATE)
-        print("", file=sys.stderr)
-        print("=" * 64, file=sys.stderr)
-        print("  FIRST-TIME SETUP", file=sys.stderr)
-        print("=" * 64, file=sys.stderr)
-        print(f"  Created: {env_path}", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("  1. Open the .env file in the project root", file=sys.stderr)
-        print("  2. Add your Jira API token and email", file=sys.stderr)
-        print("  3. Re-run this command", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("  Generate a token at:", file=sys.stderr)
-        print("  https://id.atlassian.com/manage-profile/security/api-tokens", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("  See README.md for detailed setup instructions.", file=sys.stderr)
-        print("=" * 64, file=sys.stderr)
-        sys.exit(0)
+        # Only block if env vars aren't already available from the environment
+        if not (os.environ.get("JIRA_API_TOKEN") and os.environ.get("JIRA_EMAIL")):
+            print("", file=sys.stderr)
+            print("=" * 64, file=sys.stderr)
+            print("  FIRST-TIME SETUP", file=sys.stderr)
+            print("=" * 64, file=sys.stderr)
+            print(f"  Created: {env_path}", file=sys.stderr)
+            print("", file=sys.stderr)
+            print("  1. Open the .env file in the project root", file=sys.stderr)
+            print("  2. Add your Jira API token and email", file=sys.stderr)
+            print("  3. Re-run this command", file=sys.stderr)
+            print("", file=sys.stderr)
+            print("  Generate a token at:", file=sys.stderr)
+            print("  https://id.atlassian.com/manage-profile/security/api-tokens", file=sys.stderr)
+            print("", file=sys.stderr)
+            print("  See README.md for detailed setup instructions.", file=sys.stderr)
+            print("=" * 64, file=sys.stderr)
+            sys.exit(0)
+        return  # env vars already set — continue without reading the blank .env
     with open(env_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
