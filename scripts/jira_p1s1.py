@@ -986,6 +986,10 @@ def main():
         "--dry-run", action="store_true",
         help="Print the JQL query that would be used, then exit"
     )
+    parser.add_argument(
+        "--no-open", action="store_true",
+        help="Save HTML without opening the browser (use with --html --save)"
+    )
     args = parser.parse_args()
 
     if args.all_p1:
@@ -1056,14 +1060,16 @@ def main():
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(html)
             print(f"\nSaved HTML to: {out_path}", file=sys.stderr)
-            webbrowser.open(f"file:///{out_path.replace(os.sep, '/')}")
+            if not args.no_open:
+                webbrowser.open(f"file:///{out_path.replace(os.sep, '/')}")
         else:
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".html", delete=False, encoding="utf-8"
             ) as tmp:
                 tmp.write(html)
                 tmp_path = tmp.name
-            webbrowser.open(f"file:///{tmp_path.replace(os.sep, '/')}")
+            if not args.no_open:
+                webbrowser.open(f"file:///{tmp_path.replace(os.sep, '/')}")
             print(f"Opened in browser: {tmp_path}", file=sys.stderr)
 
     if args.save and not args.html:

@@ -37,15 +37,15 @@ If not, default to **ROCm 7.13.0** and inform the user.
 
 ### 2. Fetch Tickets
 
-Run the script with the target version. ALWAYS use `--html --save` to open the dashboard in the browser AND save it to `reports/` in a single run:
+Run the script with the target version. ALWAYS use `--html --save --no-open` to silently save the HTML dashboard without opening the browser:
 
 ```bash
-python scripts/jira_p1s1.py --version "ROCm 7.13.0" --html --save
+python scripts/jira_p1s1.py --version "ROCm 7.13.0" --html --save --no-open
 ```
 
 Replace `ROCm 7.13.0` with the user-specified version if provided.
 
-NEVER run the script more than once per command invocation. One run does everything — fetch, display, and save.
+NEVER run the script more than once per command invocation. One run does everything — fetch and save.
 
 The script fetches from the ROCM Jira project:
 - **P1 tickets**: priority = `P1: High` or `P1 (Gating)` (all severities)
@@ -66,7 +66,7 @@ Then note in the report: "No tickets had Severity explicitly set to Critical/Blo
 
 ### 4. Generate Report
 
-Format the output as:
+The script outputs a structured markdown summary to stdout. Use that data to format the chat report as follows:
 
 ```markdown
 # Mainline Blockers — ROCm [VERSION]
@@ -75,30 +75,47 @@ _Generated: [DATE]_
 _Source: [Jira ROCM project](https://amd-hub.atlassian.net/jira/software/c/projects/ROCM/summary)_
 
 ## Summary
-- **Total P1 blockers**: N
-- **Open / In Progress**: N
-- **Awaiting triage**: N
-- **Done / Discarded**: N (excluded below)
 
-## Active Blockers (Open / In Progress / Triage / Queue)
+| Category | Count |
+|----------|-------|
+| Total tickets | N |
+| Active P1+S1 blockers | N |
+| Other high priority (P1+S2 / P2+S1) | N |
+| Resolved (Done / Discarded) | N |
 
-| Key | Summary | Status | Assignee | Age |
-|-----|---------|--------|----------|-----|
-| [ROCM-XXXXX](link) | Summary | Status | @name | Nd |
+## Active Blockers — P1 + S1 (N)
 
-## Needs Triage
+Notable items requiring attention:
+- [bullet points highlighting key concerns — e.g., unassigned tickets, tickets stuck in Triage/Queue, oldest tickets]
 
-PRs in Triage state with no assignee — need owner assignment.
+| Key | Summary | Status | Assignee | Updated |
+|-----|---------|--------|----------|---------|
+| [ROCM-XXXXX](link) | Summary | Status | Name | Nd ago |
 
-## Recently Resolved (last 7 days)
+## Other High Priority — P1+S2 / P2+S1 (N)
 
-| Key | Summary | Resolution |
-|-----|---------|------------|
+Notable items requiring attention:
+- [bullet points highlighting key concerns — e.g., new tickets today, performance regressions, security issues]
+
+| Key | Summary | Status | Assignee | Updated |
+|-----|---------|--------|----------|---------|
+| [ROCM-XXXXX](link) | Summary | Status | Name | Nd ago |
+
+## Recently Resolved (N)
+
+[brief summary — e.g., "3 resolved today: ROCM-XXXXX (Done), ROCM-YYYYY (Discarded)"]
+
+---
+
+**Full interactive dashboard saved to:** [reports/YYYY-MM-DD-HHMM-mainline-blockers-version.html](reports/YYYY-MM-DD-HHMM-mainline-blockers-version.html)
 ```
+
+Read the saved HTML path from the script's stderr output (line starting with "Saved HTML to:") and use it for the link at the end.
 
 ## Notes
 
-- Exclude tickets in **Done** or **Discarded** status from the active section (show them in a separate "Resolved" section)
+- Exclude tickets in **Done** or **Discarded** status from the active sections (show them in the Resolved section)
 - Always link ticket keys to `https://amd-hub.atlassian.net/browse/ROCM-XXXXX`
 - If the Severity field is blank, note it as "Severity not set" rather than hiding the ticket
 - Age = days since `updatedAt`
+- NEVER open the browser yourself — the user will click the dashboard link if they want it
