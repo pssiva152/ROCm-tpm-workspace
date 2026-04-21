@@ -34,23 +34,26 @@ Do NOT proceed if the dry-run fails. Do NOT try to fix the problem.
 
 Check if the user specified a version in the command (e.g. `/mainline-blocker ROCm 7.13.0`).
 
-If not specified, fetch the latest release tag from GitHub to determine the default version:
+If not specified, derive the active development branch by fetching the latest public release from TheRock and incrementing the minor version by 1:
 
 ```bash
 python -c "
-import urllib.request, json, re, sys
+import urllib.request, json, re
 try:
     req = urllib.request.Request('https://api.github.com/repos/ROCm/TheRock/releases/latest', headers={'User-Agent': 'Mozilla/5.0'})
     with urllib.request.urlopen(req, timeout=5) as r:
         tag = json.load(r).get('tag_name', '')
-    m = re.search(r'(\d+\.\d+(?:\.\d+)?)', tag)
-    print('ROCm ' + m.group(1) if m else '', end='')
-except Exception as e:
+    m = re.search(r'(\d+)\.(\d+)', tag)
+    if m:
+        print(f'ROCm {m.group(1)}.{int(m.group(2))+1}.0', end='')
+    else:
+        print('', end='')
+except Exception:
     print('', end='')
 "
 ```
 
-- If the command returns a version (e.g. `ROCm 7.13.0`), use it as the default and inform the user it was auto-detected from [TheRock releases](https://github.com/ROCm/TheRock/releases).
+- If the command returns a version (e.g. `ROCm 7.13.0`), use it as the default and inform the user it was derived from the latest TheRock release + 1 minor version (i.e. the active development branch).
 - If the command returns empty or fails, fall back to **ROCm 7.13.0** and note that the GitHub fetch failed.
 
 ### 2. Fetch Tickets
