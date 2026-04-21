@@ -33,17 +33,35 @@ Do NOT proceed if the dry-run fails. Do NOT try to fix the problem.
 ### 1. Determine Target Version
 
 Check if the user specified a version in the command (e.g. `/mainline-blocker ROCm 7.13.0`).
-If not, default to **ROCm 7.13.0** and inform the user.
+
+If not specified, fetch the latest release tag from GitHub to determine the default version:
+
+```bash
+python -c "
+import urllib.request, json, re, sys
+try:
+    req = urllib.request.Request('https://api.github.com/repos/ROCm/TheRock/releases/latest', headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        tag = json.load(r).get('tag_name', '')
+    m = re.search(r'(\d+\.\d+(?:\.\d+)?)', tag)
+    print('ROCm ' + m.group(1) if m else '', end='')
+except Exception as e:
+    print('', end='')
+"
+```
+
+- If the command returns a version (e.g. `ROCm 7.13.0`), use it as the default and inform the user it was auto-detected from [TheRock releases](https://github.com/ROCm/TheRock/releases).
+- If the command returns empty or fails, fall back to **ROCm 7.13.0** and note that the GitHub fetch failed.
 
 ### 2. Fetch Tickets
 
-Run the script with the target version. ALWAYS use `--html --save --no-open` to silently save the HTML dashboard without opening the browser:
+Run the script with the target version (either user-specified or auto-detected in step 1). ALWAYS use `--html --save --no-open` to silently save the HTML dashboard without opening the browser:
 
 ```bash
-python scripts/jira_p1s1.py --version "ROCm 7.13.0" --html --save --no-open
+python scripts/jira_p1s1.py --version "<RESOLVED_VERSION>" --html --save --no-open
 ```
 
-Replace `ROCm 7.13.0` with the user-specified version if provided.
+Replace `<RESOLVED_VERSION>` with the version determined in step 1.
 
 NEVER run the script more than once per command invocation. One run does everything — fetch and save.
 
@@ -59,7 +77,7 @@ The script fetches from the ROCM Jira project:
 If the script returns 0 results, run a broader query without the severity filter:
 
 ```bash
-python scripts/jira_p1s1.py --version "ROCm 7.13.0" --all-p1
+python scripts/jira_p1s1.py --version "<RESOLVED_VERSION>" --all-p1
 ```
 
 Then note in the report: "No tickets had Severity explicitly set to Critical/Blocker. Showing all P1 tickets."

@@ -20,7 +20,7 @@ This workspace is for TPM/Manager oversight of the ROCm ecosystem — focused on
 
 | Command | Purpose |
 |---------|---------|
-| `/mainline-blocker` | Fetch P1 blocker tickets from Jira ROCM project for ROCm 7.13.0 |
+| `/mainline-blocker` | Fetch P1 blocker tickets from Jira ROCM project (auto-detects latest version from TheRock releases) |
 | `/mainline-blocker <version>` | Fetch P1 blockers for a specific version (e.g. `ROCm 7.12.0`) |
 
 ### How `/mainline-blocker` Works
