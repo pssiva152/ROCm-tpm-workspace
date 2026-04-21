@@ -34,27 +34,63 @@ Do NOT proceed if the dry-run fails. Do NOT try to fix the problem.
 
 Check if the user specified a version in the command (e.g. `/mainline-blocker ROCm 7.13.0`).
 
-If not specified, derive the active development branch by fetching the latest public release from TheRock and incrementing the minor version by 1:
+If not specified, auto-detect the active development branch by combining two sources:
+1. GitHub releases API → establishes the latest shipped version as a floor
+2. Jira project versions API → finds the earliest version above that floor (the next in-flight version)
+
+This correctly handles major version bumps (e.g. 7.x → 8.0) without any hardcoded arithmetic.
 
 ```bash
 python -c "
-import urllib.request, json, re
+import urllib.request, json, os, re, base64
+from pathlib import Path
+
 try:
+    # Load .env if present
+    env_file = Path('.env')
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if '=' in line and not line.startswith('#'):
+                k, v = line.split('=', 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
+    # Step 1: get latest public release from TheRock to use as a version floor
     req = urllib.request.Request('https://api.github.com/repos/ROCm/TheRock/releases/latest', headers={'User-Agent': 'Mozilla/5.0'})
     with urllib.request.urlopen(req, timeout=5) as r:
         tag = json.load(r).get('tag_name', '')
     m = re.search(r'(\d+)\.(\d+)', tag)
-    if m:
-        print(f'ROCm {m.group(1)}.{int(m.group(2))+1}.0', end='')
-    else:
-        print('', end='')
+    floor = (int(m.group(1)), int(m.group(2)), 0) if m else (0, 0, 0)
+
+    # Step 2: query Jira for the earliest ROCm version above the floor
+    token = os.environ.get('JIRA_API_TOKEN', '')
+    email = os.environ.get('JIRA_EMAIL', '')
+    creds = base64.b64encode(f'{email}:{token}'.encode()).decode()
+    req = urllib.request.Request(
+        'https://amd-hub.atlassian.net/rest/api/3/project/ROCM/versions',
+        headers={'Authorization': f'Basic {creds}', 'Accept': 'application/json'}
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        versions = json.load(r)
+
+    candidates = []
+    for v in versions:
+        name = v.get('name', '')
+        nums = re.findall(r'\d+', name)
+        if not name.startswith('ROCm') or not nums or v.get('archived'):
+            continue
+        t = tuple(int(x) for x in (nums + ['0', '0'])[:3])
+        if t > floor:
+            candidates.append((t, name))
+
+    candidates.sort()
+    print(candidates[0][1] if candidates else '', end='')
 except Exception:
     print('', end='')
 "
 ```
 
-- If the command returns a version (e.g. `ROCm 7.13.0`), use it as the default and inform the user it was derived from the latest TheRock release + 1 minor version (i.e. the active development branch).
-- If the command returns empty or fails, fall back to **ROCm 7.13.0** and note that the GitHub fetch failed.
+- If the command returns a version (e.g. `ROCm 7.13.0`), use it as the default and inform the user it was auto-detected from Jira (earliest in-flight version above the latest TheRock release).
+- If the command returns empty or fails, fall back to **ROCm 7.13.0** and note that auto-detection failed.
 
 ### 2. Fetch Tickets
 
